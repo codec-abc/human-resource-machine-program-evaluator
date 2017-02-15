@@ -3,5 +3,6 @@
 to run
 
 ```bash
-fsi hmrpEvaluator.fsx
+dotnet restore
+dotnet run
 ```

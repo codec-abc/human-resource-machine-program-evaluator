@@ -1,4 +1,4 @@
-open System
+﻿open System
 open System.IO
 open System.Text.RegularExpressions
 open System.Collections.Generic
@@ -116,15 +116,17 @@ let parseLine (line : string) (lineNumber : int) =
     else
         NoneResult
 
-// test
-let lines = File.ReadAllLines "program.hrmp"
-let results = new List<LineParseResult>()
+[<EntryPoint>]
+let main argv = 
+    let lines = File.ReadAllLines "program.hrmp"
+    let results = new List<LineParseResult>()
 
-for i in 0 .. (lines.Length - 1) do
-    let line = lines.[i]
-    //let result = parseLine line i
-    //results.Add(result)
-    ()
+    for i in 0 .. (lines.Length - 1) do
+        let line = lines.[i]
+        let result = parseLine line i
+        results.Add(result)
 
-for result in results do
-     printfn "%s" <| result.ToString()
+    for result in results do
+        printfn "%s" <| result.ToString()
+
+    let returnCode = 0 in returnCode
