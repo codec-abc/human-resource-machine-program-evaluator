@@ -23,19 +23,16 @@ type Label =
 type Instruction = 
     | Inbox
     | Outbox
-
     | JumpIfNegative of string
     | JumpIfZero of string
     | Jump of string
-
     | CopyTo of int
     | CopyFrom of int
-
     | Increment of int
     | Decrement of int
-
     | Add of int
     | Subtract of int
+
     override x.ToString() = 
         match x with
             | Inbox -> "Inbox"
@@ -54,44 +51,55 @@ type Instruction =
             | Add register -> "Add with : " + register.ToString()
             | Subtract register -> "Subtract with : " + register.ToString()
 
+type ProgramLine =
+    | MeaningLessLine
+    | InstructionLine of Instruction
+    | LabelLine of Label
+    override x.ToString() = 
+        match x with
+            | MeaningLessLine -> "Line is meaningless and can be skipped"
+            | InstructionLine instruction -> "Line is an instruction : "  + instruction.ToString()
+            | LabelLine label -> "Line is a label : " + label.ToString()
+
 type MachineState = {
     Input : List<int>;
     Output : List<int>;
     Registers : List<Register>;
     HumanValue : Option<int>;
-    //TODO program
+    Program : List<ProgramLine>;
+    CurrentInstructionLine : int;
 }
-
-type LineParseResult =
-    | NoneResult
-    | InstructionResult of Instruction
-    | LabelResult of Label
-    override x.ToString() = 
-        match x with
-            | NoneResult -> "Line is not a valid line"
-            | InstructionResult instruction -> "Line is an instruction : "  + instruction.ToString()
-            | LabelResult label -> "Line is a label : " + label.ToString()
 
 let toInstruction (instructionName : string) (argument : Option<string>) (lineNumber : int) =
     let instructionUpperCase = instructionName.ToUpper()
-    match instructionUpperCase with
-        | "INBOX" -> InstructionResult Inbox
-        | "OUTBOX" -> InstructionResult Outbox
+    try
+        match instructionUpperCase with
+            | "INBOX" -> InstructionLine Inbox
+            | "OUTBOX" -> InstructionLine Outbox
 
-        | "JUMPZ" -> InstructionResult <| JumpIfZero argument.Value
-        | "JUMPN" -> InstructionResult <| JumpIfNegative argument.Value
-        | "JUMP" -> InstructionResult <| JumpIfNegative argument.Value
+            | "JUMPZ" -> InstructionLine <| JumpIfZero argument.Value
+            | "JUMPN" -> InstructionLine <| JumpIfNegative argument.Value
+            | "JUMP" -> InstructionLine <| JumpIfNegative argument.Value
 
-        | "COPYTO" -> let value = int argument.Value in InstructionResult <| CopyTo value
-        | "COPYFROM" -> let value = int argument.Value in InstructionResult <| CopyFrom value
+            | "COPYTO" -> let value = int argument.Value in InstructionLine <| CopyTo value
+            | "COPYFROM" -> let value = int argument.Value in InstructionLine <| CopyFrom value
 
-        | "BUMPUP" -> let value = int argument.Value in InstructionResult <| Increment value
-        | "BUMPDN" -> let value = int argument.Value in InstructionResult <| Decrement value
+            | "BUMPUP" -> let value = int argument.Value in InstructionLine <| Increment value
+            | "BUMPDN" -> let value = int argument.Value in InstructionLine <| Decrement value
 
-        | "ADD" -> let value = int argument.Value in InstructionResult <| Add value
-        | "SUB" -> let value = int argument.Value in InstructionResult <| Subtract value
+            | "ADD" -> let value = int argument.Value in InstructionLine <| Add value
+            | "SUB" -> let value = int argument.Value in InstructionLine <| Subtract value
 
-        | _ -> NoneResult
+            | _ -> MeaningLessLine
+    with 
+        | _ -> 
+            let argumentToString = 
+                match argument with
+                | None -> "None"
+                | Some x -> x.ToString()
+            printfn "Cannot parse line %i which instruction is %s and argument %s" lineNumber instructionName argumentToString
+            printfn "Line will be interpreted as a comment"
+            MeaningLessLine
 
 let parseLine (line : string) (lineNumber : int) =
     let isLabel = LabelRegex.IsMatch line
@@ -102,7 +110,7 @@ let parseLine (line : string) (lineNumber : int) =
             Name = regexMatch.Groups.[0].Captures.[0].Value;
             Line = lineNumber;
         }
-        LabelResult label
+        LabelLine label
     elif isInstruction then
         let regexMatch = InstructionRegex.Match line
         let instructionName = regexMatch.Groups.[2].Captures.[0].Value
@@ -114,12 +122,12 @@ let parseLine (line : string) (lineNumber : int) =
                 None
         toInstruction instructionName argument lineNumber
     else
-        NoneResult
+        MeaningLessLine
 
 [<EntryPoint>]
 let main argv = 
     let lines = File.ReadAllLines "program.hrmp"
-    let results = new List<LineParseResult>()
+    let results = new List<ProgramLine>()
 
     for i in 0 .. (lines.Length - 1) do
         let line = lines.[i]
