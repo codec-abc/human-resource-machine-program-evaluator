@@ -1,6 +1,7 @@
 open System
 open System.IO
 open System.Text.RegularExpressions
+open System.Collections.Generic
 
 let LabelRegex = new Regex @"^(\w+):$"
 let InstructionRegex = new Regex @"^(\s+)(\w+)(\s*)(\w*)$"
@@ -34,8 +35,7 @@ type Instruction =
     | Decrement of int
 
     | Add of int
-    | Substract of int
-
+    | Subtract of int
     override x.ToString() = 
         match x with
             | Inbox -> "Inbox"
@@ -52,7 +52,7 @@ type Instruction =
             | Decrement register -> "Decrement : " + register.ToString()
 
             | Add register -> "Add with : " + register.ToString()
-            | Substract register -> "Substract with : " + register.ToString()
+            | Subtract register -> "Subtract with : " + register.ToString()
 
 type MachineState = {
     Input : List<int>;
@@ -69,10 +69,29 @@ type LineParseResult =
     override x.ToString() = 
         match x with
             | NoneResult -> "Line is not a valid line"
-            | InstructionResult instruction -> "Line is an instruction : "  + instruction.ToString() //sprintf "%A" x
+            | InstructionResult instruction -> "Line is an instruction : "  + instruction.ToString()
             | LabelResult label -> "Line is a label : " + label.ToString()
-let strCompare (str1 : string) (str2 : string)  = 
-    String.Compare (str1, str2, true)
+
+let toInstruction (instructionName : string) (argument : Option<string>) (lineNumber : int) =
+    let instructionUpperCase = instructionName.ToUpper()
+    match instructionUpperCase with
+        | "INBOX" -> InstructionResult Inbox
+        | "OUTBOX" -> InstructionResult Outbox
+
+        | "JUMPZ" -> InstructionResult <| JumpIfZero argument.Value
+        | "JUMPN" -> InstructionResult <| JumpIfNegative argument.Value
+        | "JUMP" -> InstructionResult <| JumpIfNegative argument.Value
+
+        | "COPYTO" -> let value = int argument.Value in InstructionResult <| CopyTo value
+        | "COPYFROM" -> let value = int argument.Value in InstructionResult <| CopyFrom value
+
+        | "BUMPUP" -> let value = int argument.Value in InstructionResult <| Increment value
+        | "BUMPDN" -> let value = int argument.Value in InstructionResult <| Decrement value
+
+        | "ADD" -> let value = int argument.Value in InstructionResult <| Add value
+        | "SUB" -> let value = int argument.Value in InstructionResult <| Subtract value
+
+        | _ -> NoneResult
 
 let parseLine (line : string) (lineNumber : int) =
     let isLabel = LabelRegex.IsMatch line
@@ -93,21 +112,19 @@ let parseLine (line : string) (lineNumber : int) =
                 Some regexMatch.Groups.[4].Captures.[0].Value
             else
                 None
-        NoneResult //  TODO
+        toInstruction instructionName argument lineNumber
     else
         NoneResult
 
-
-let line = "    BUMPDN   a"
-let lineNumber = 0
-
-let result = parseLine line lineNumber
-printfn "%s" <| result.ToString()
-
 // test
-// let lines = File.ReadAllLines "program.hrmp"
-// let noCommentLines = removeUselessLines lines
+let lines = File.ReadAllLines "program.hrmp"
+let results = new List<LineParseResult>()
 
-// for line in noCommentLines do
-//     printfn "%s" line
+for i in 0 .. (lines.Length - 1) do
+    let line = lines.[i]
+    //let result = parseLine line i
+    //results.Add(result)
+    ()
 
+for result in results do
+     printfn "%s" <| result.ToString()
