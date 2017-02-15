@@ -9,7 +9,7 @@ let InstructionRegex = new Regex @"^(\s+)(\w+)(\s*)(\w*)$"
 type Register = 
     {
         Index : int;
-        Value : Option<int>
+        Value : int option
     }
     override x.ToString() = "Register at " + string x.Index
 
@@ -62,11 +62,11 @@ type ProgramLine =
             | LabelLine label -> "Line is a label : " + label.ToString()
 
 type MachineState = {
-    Input : List<int>;
-    Output : List<int>;
-    Registers : List<Register>;
-    HumanValue : Option<int>;
-    Program : List<ProgramLine>;
+    Input : int list;
+    Output : int list;
+    Registers : Register list;
+    HumanValue : int option;
+    Program : ProgramLine list;
     CurrentInstructionLine : int;
 }
 
@@ -123,6 +123,40 @@ let parseLine (line : string) (lineNumber : int) =
         toInstruction instructionName argument lineNumber
     else
         MeaningLessLine
+
+let skipLine machineState =
+    {machineState with CurrentInstructionLine = machineState.CurrentInstructionLine + 1}
+
+let runInstruction (machineState : MachineState) (instruction : Instruction) =
+    match instruction with
+        | Inbox -> 
+            let firstElemOfInput = machineState.Input.[0]
+            let restOfInput = List.tail machineState.Input
+            {
+                machineState with 
+                    CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                    HumanValue = Some firstElemOfInput;
+                    Input = restOfInput;
+            }
+
+        | Outbox -> machineState 
+        | JumpIfNegative str -> machineState
+        | JumpIfZero str -> machineState
+        | Jump str -> machineState
+        | CopyTo nb -> machineState
+        | CopyFrom nb -> machineState
+        | Increment nb -> machineState
+        | Decrement nb -> machineState
+        | Add nb -> machineState
+        | Subtract nb -> machineState 
+
+let runStep (machineState : MachineState) =
+    let currentLineNumber = machineState.CurrentInstructionLine;
+    let currentInstruction = machineState.Program.[currentLineNumber];
+    match currentInstruction with
+        | MeaningLessLine -> skipLine machineState
+        | LabelLine label -> skipLine machineState
+        | InstructionLine instruction -> runInstruction machineState instruction
 
 [<EntryPoint>]
 let main argv = 
