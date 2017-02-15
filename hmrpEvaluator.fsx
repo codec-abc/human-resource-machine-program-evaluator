@@ -2,7 +2,7 @@ open System
 open System.IO
 open System.Text.RegularExpressions
 
-let iBlankLineRegex = new Regex @"^(\s)*$"
+let isBlankLineRegex = new Regex @"^(\s)*$"
 let isLabelRegex = new Regex @"^(\w)*:$"
 
 type Label = {
@@ -18,19 +18,32 @@ type Register = {
 type Instruction = 
     | Inbox
     | Outbox
-    | CopyTo of Register
-    | CopyFrom of Register
+
     | JumpIfNegative of Label
     | JumpIfZero of Label
+    | Jump of Label
+
+    | CopyTo of Register
+    | CopyFrom of Register
+
     | Increment of Register
     | Decrement of Register
+
     | Add of Register
     | Substract  of Register
+
+type MachineState = {
+    Input : List<int>;
+    Output : List<int>;
+    Registers : List<Register>;
+    HumanValue : Option<int>;
+    //TODO program
+}
 
 let removeUselessLines inputLines =
     let noBlankLines = 
         inputLines |>
-            Array.filter (not << iBlankLineRegex.IsMatch)
+            Array.filter (not << isBlankLineRegex.IsMatch)
 
     let noCommentLines = 
         noBlankLines |>
@@ -38,6 +51,10 @@ let removeUselessLines inputLines =
 
     noCommentLines
 
+let parseLine (line : string) =
+    Inbox
+
+// test
 let lines = File.ReadAllLines "program.hrmp"
 let noCommentLines = removeUselessLines lines
 
