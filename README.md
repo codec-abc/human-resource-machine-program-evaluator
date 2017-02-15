@@ -1,5 +1,9 @@
 # HMRP Evaluator
 
+## Dependencies
+.Net core SDK
+
+## Run
 to run
 
 ```bash
