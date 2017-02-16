@@ -6,7 +6,6 @@
 .Net core SDK
 
 ## Run
-to run
 
 ```bash
 dotnet restore
