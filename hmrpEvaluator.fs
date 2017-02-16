@@ -300,17 +300,23 @@ let runStep (machineState : MachineState) =
         | LabelLine label -> skipLine machineState
         | InstructionLine instruction -> runInstruction machineState instruction
 
-[<EntryPoint>]
-let main argv = 
-    let lines = File.ReadAllLines "program.hrmp"
-    let results = new List<ProgramLine>()
 
+let stringArrayToProgramList (lines : string array) =
+    let results = new List<ProgramLine>()
     for i in 0 .. (lines.Length - 1) do
         let line = lines.[i]
         let result = parseLine line i
         results.Add(result)
 
-    for result in results do
+    let returnedValue = Seq.toList results
+    returnedValue
+
+[<EntryPoint>]
+let main argv = 
+    let lines = File.ReadAllLines "program.hrmp"
+    let programLines = stringArrayToProgramList lines
+
+    for result in programLines do
         printfn "%s" <| result.ToString()
 
     let returnCode = 0 in returnCode
