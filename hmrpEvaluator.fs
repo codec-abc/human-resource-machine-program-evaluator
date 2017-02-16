@@ -62,8 +62,8 @@ type ProgramLine =
             | LabelLine label -> "Line is a label : " + label.ToString()
 
 type MachineState = {
-    Input : int list;
-    Output : int list;
+    Inputs : int list;
+    Outputs : int list;
     Registers : Register list;
     HumanValue : int option;
     Program : ProgramLine list;
@@ -127,28 +127,106 @@ let parseLine (line : string) (lineNumber : int) =
 let skipLine machineState =
     {machineState with CurrentInstructionLine = machineState.CurrentInstructionLine + 1}
 
+let getLineIndexByLabelName (program : ProgramLine list) (labelToFind : string) =
+    let filterFunc = fun (programLine : ProgramLine) -> 
+        match programLine with
+            | MeaningLessLine -> false
+            | InstructionLine instruction -> false
+            | LabelLine label -> 
+                label.Name = labelToFind
+    List.findIndex filterFunc program
+
+let getRegisterByIndex (registers : Register list) (registerIndex : int) =
+    let filterFunc = fun (register : Register) -> 
+        register.Index = registerIndex
+    List.find filterFunc registers
+
+let runInboxInstruction machineState =
+    let firstElemOfInput = machineState.Inputs.[0]
+    let restOfInput = List.tail machineState.Inputs
+
+    {
+        machineState with 
+            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+            HumanValue = Some firstElemOfInput;
+            Inputs = restOfInput;
+    }
+
+let runOutBoxInstruction machineState =
+    let newOutputs = List.append machineState.Outputs [machineState.HumanValue.Value]
+
+    {
+        machineState with
+            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+            HumanValue = None;
+            Outputs = newOutputs
+    }
+
+let runJumpIfNegativeInstruction machineState labelToJumpTo =
+    let shouldJump = machineState.HumanValue.Value < 0;
+    let nextLineIndex = 
+        if shouldJump then
+            getLineIndexByLabelName machineState.Program labelToJumpTo
+        else
+            machineState.CurrentInstructionLine + 1
+
+    {
+        machineState with
+            CurrentInstructionLine = nextLineIndex;
+    }
+
+let runJumpIfZeroInstruction machineState labelToJumpTo =
+    let shouldJump = machineState.HumanValue.Value = 0;
+    let nextLineIndex = 
+        if shouldJump then
+            getLineIndexByLabelName machineState.Program labelToJumpTo
+        else
+            machineState.CurrentInstructionLine + 1
+
+    {
+        machineState with
+            CurrentInstructionLine = nextLineIndex;
+    }
+
+let runJumpInstruction machineState labelToJumpTo =
+    let nextLineIndex = getLineIndexByLabelName machineState.Program labelToJumpTo
+
+    {
+        machineState with
+            CurrentInstructionLine = nextLineIndex;
+    }
+
+let runCopyToInstruction machineState registerIndex =
+    let oldRegister = getRegisterByIndex machineState.Registers registerIndex
+    let newRegister = 
+        {
+            oldRegister with
+                Value = Some machineState.HumanValue.Value
+        }
+    
+    let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
+    let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
+
+    {
+        machineState with 
+            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+            Registers = allRegistersUpdate
+    }
+
+
 let runInstruction (machineState : MachineState) (instruction : Instruction) =
     match instruction with
-        | Inbox -> 
-            let firstElemOfInput = machineState.Input.[0]
-            let restOfInput = List.tail machineState.Input
-            {
-                machineState with 
-                    CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                    HumanValue = Some firstElemOfInput;
-                    Input = restOfInput;
-            }
-
-        | Outbox -> machineState 
-        | JumpIfNegative str -> machineState
-        | JumpIfZero str -> machineState
-        | Jump str -> machineState
-        | CopyTo nb -> machineState
-        | CopyFrom nb -> machineState
-        | Increment nb -> machineState
-        | Decrement nb -> machineState
-        | Add nb -> machineState
-        | Subtract nb -> machineState 
+        | Inbox -> runInboxInstruction machineState
+        | Outbox -> runOutBoxInstruction machineState
+        | JumpIfNegative labelToJumpTo -> runJumpIfNegativeInstruction machineState labelToJumpTo
+        | JumpIfZero labelToJumpTo -> runJumpIfZeroInstruction machineState labelToJumpTo
+        | Jump labelToJumpTo -> runJumpInstruction machineState labelToJumpTo
+        | CopyTo registerIndex -> runCopyToInstruction machineState registerIndex
+        | CopyFrom registerIndex -> machineState
+        | Increment registerIndex -> machineState
+        | Decrement registerIndex -> machineState
+        | Add registerIndex -> machineState
+        | Subtract registerIndex -> machineState 
 
 let runStep (machineState : MachineState) =
     let currentLineNumber = machineState.CurrentInstructionLine;
