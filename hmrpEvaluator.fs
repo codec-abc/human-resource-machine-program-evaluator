@@ -57,14 +57,28 @@ type ProgramLine =
             | InstructionLine instruction -> "Line is an instruction : "  + instruction.ToString()
             | LabelLine label -> "Line is a label : " + label.ToString()
 
-type MachineState = {
-    Inputs : int list;
-    Outputs : int list;
-    Registers : Register list;
-    HumanValue : int option;
-    Program : ProgramLine list;
-    CurrentInstructionLine : int;
-}
+type MachineState = 
+    {
+        Inputs : int list;
+        Outputs : int list;
+        Registers : Register list;
+        HumanValue : int option;
+        ProgramLines : ProgramLine list;
+        CurrentInstructionLine : int;
+    }
+    override x.ToString() =
+        let inputsAsString =  List.fold (fun accum elem -> accum + " " + string elem) "" x.Inputs 
+        let outputsAsString = List.fold (fun accum elem -> accum + " " + string elem) "" x.Outputs
+        let humanValueAsString = 
+            match x.HumanValue with
+            | None -> "None"
+            | Some aValue -> string aValue
+        let result =
+             "State with Inputs " + inputsAsString + "\n" + 
+             "Outputs " + outputsAsString + "\n" + 
+             "Human Value " + humanValueAsString + "\n" + 
+             "Current Line " + x.CurrentInstructionLine.ToString()
+        result
 
 let toInstruction (instructionName : string) (argument : string option) (lineNumber : int) =
     let instructionUpperCase = instructionName.ToUpper()
@@ -164,7 +178,7 @@ let runJumpIfNegativeInstruction machineState labelToJumpTo =
     let shouldJump = machineState.HumanValue.Value < 0;
     let nextLineIndex = 
         if shouldJump then
-            getLineIndexByLabelName machineState.Program labelToJumpTo
+            getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
         else
             machineState.CurrentInstructionLine + 1
 
@@ -179,7 +193,7 @@ let runJumpIfZeroInstruction machineState labelToJumpTo =
     let shouldJump = machineState.HumanValue.Value = 0;
     let nextLineIndex = 
         if shouldJump then
-            getLineIndexByLabelName machineState.Program labelToJumpTo
+            getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
         else
             machineState.CurrentInstructionLine + 1
 
@@ -191,7 +205,7 @@ let runJumpIfZeroInstruction machineState labelToJumpTo =
         in result
 
 let runJumpInstruction machineState labelToJumpTo =
-    let nextLineIndex = getLineIndexByLabelName machineState.Program labelToJumpTo
+    let nextLineIndex = getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
     let result = 
         {
             machineState with
@@ -299,11 +313,30 @@ let runInstruction (machineState : MachineState) (instruction : Instruction) =
 
 let runStep (machineState : MachineState) =
     let currentLineNumber = machineState.CurrentInstructionLine;
-    let currentInstruction = machineState.Program.[currentLineNumber];
+    let currentInstruction = machineState.ProgramLines.[currentLineNumber];
     match currentInstruction with
         | MeaningLessLine -> skipLine machineState
         | LabelLine label -> skipLine machineState
         | InstructionLine instruction -> runInstruction machineState instruction
+
+let run initialMachineState =
+    let mutable keepRunning = true
+    let mutable allStates = []
+    let mutable currentState = initialMachineState
+    while keepRunning do
+        try
+            currentState <- runStep currentState
+            allStates <- List.append allStates [currentState]
+        with
+            _ -> 
+                keepRunning <- false
+                ()
+    allStates
+
+let printStates states =
+    for state in states do
+        let stateToString = state.ToString()
+        printfn "%s\n" stateToString
 
 let stringArrayToProgramList (lines : string array) =
     let results = new List<ProgramLine>()
@@ -313,10 +346,46 @@ let stringArrayToProgramList (lines : string array) =
         results.Add(result)
     let returnedValue = Seq.toList results in returnedValue
 
+let defaultMachineState = 
+    {
+        Inputs = [];
+        Outputs =[];
+        Registers = [];
+        HumanValue = None;
+        ProgramLines = [];
+        CurrentInstructionLine = 0;
+    }
+
+let buildEmptyRegisters nbOfRegisters =
+    let mutable registers = []
+    for i in 0 .. nbOfRegisters do
+        let newRegister = 
+            {
+                Index = i;
+                RegisterValue = None
+            }
+        registers <- List.append registers [newRegister]
+    registers
+
+let printProgramLines programLines =
+    for result in programLines do
+        printfn "%s" <| result.ToString()
+
 [<EntryPoint>]
 let main argv = 
     let lines = File.ReadAllLines "program.hrmp"
     let programLines = stringArrayToProgramList lines
-    for result in programLines do
-        printfn "%s" <| result.ToString()
+    //printProgramLines programLines
+    let initialMachineState = 
+        {
+            defaultMachineState with
+                ProgramLines = programLines
+                Inputs = [1;3;4;-2]
+                Registers = buildEmptyRegisters 6
+        }
+    
+    printfn "START"
+    let states = run initialMachineState
+    //printStates states
+    printfn "END"
     let returnCode = 0 in returnCode
