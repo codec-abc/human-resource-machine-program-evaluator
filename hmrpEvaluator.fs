@@ -9,7 +9,7 @@ let InstructionRegex = new Regex @"^(\s+)(\w+)(\s*)(\w*)$"
 type Register = 
     {
         Index : int;
-        Value : int option
+        RegisterValue : int option
     }
     override x.ToString() = "Register at " + string x.Index
 
@@ -201,7 +201,7 @@ let runCopyToInstruction machineState registerIndex =
     let newRegister = 
         {
             oldRegister with
-                Value = Some machineState.HumanValue.Value
+                RegisterValue = Some machineState.HumanValue.Value
         }
     
     let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
@@ -213,6 +213,70 @@ let runCopyToInstruction machineState registerIndex =
             Registers = allRegistersUpdate
     }
 
+let runCopyFromInstruction machineState registerIndex =
+    let register = getRegisterByIndex machineState.Registers registerIndex
+
+    {
+        machineState with 
+            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+            HumanValue = Some register.RegisterValue.Value
+    }
+
+let runAddInstruction machineState registerIndex =
+    let register = getRegisterByIndex machineState.Registers registerIndex
+
+    {
+        machineState with 
+            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+            HumanValue = Some <| register.RegisterValue.Value + machineState.HumanValue.Value
+    }
+
+let runSubtractInstruction machineState registerIndex =
+    let register = getRegisterByIndex machineState.Registers registerIndex
+
+    {
+        machineState with 
+            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+            HumanValue = Some <| machineState.HumanValue.Value - register.RegisterValue.Value
+    }
+
+let runIncrementInstruction machineState registerIndex =
+    let oldRegister = getRegisterByIndex machineState.Registers registerIndex
+    let newValue = oldRegister.RegisterValue.Value + 1
+
+    let newRegister = 
+        {
+            oldRegister with
+                RegisterValue = Some newValue
+        }
+    
+    let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
+    let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
+
+    {
+        machineState with 
+            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+            Registers = allRegistersUpdate
+    }
+
+let runDecrementInstruction machineState registerIndex =
+    let oldRegister = getRegisterByIndex machineState.Registers registerIndex
+    let newValue = oldRegister.RegisterValue.Value - 1
+
+    let newRegister = 
+        {
+            oldRegister with
+                RegisterValue = Some newValue
+        }
+    
+    let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
+    let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
+
+    {
+        machineState with 
+            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+            Registers = allRegistersUpdate
+    }
 
 let runInstruction (machineState : MachineState) (instruction : Instruction) =
     match instruction with
@@ -222,11 +286,11 @@ let runInstruction (machineState : MachineState) (instruction : Instruction) =
         | JumpIfZero labelToJumpTo -> runJumpIfZeroInstruction machineState labelToJumpTo
         | Jump labelToJumpTo -> runJumpInstruction machineState labelToJumpTo
         | CopyTo registerIndex -> runCopyToInstruction machineState registerIndex
-        | CopyFrom registerIndex -> machineState
-        | Increment registerIndex -> machineState
-        | Decrement registerIndex -> machineState
-        | Add registerIndex -> machineState
-        | Subtract registerIndex -> machineState 
+        | CopyFrom registerIndex -> runCopyFromInstruction machineState registerIndex
+        | Add registerIndex -> runAddInstruction machineState registerIndex
+        | Subtract registerIndex -> runSubtractInstruction machineState registerIndex 
+        | Increment registerIndex -> runIncrementInstruction machineState registerIndex
+        | Decrement registerIndex -> runDecrementInstruction machineState registerIndex
 
 let runStep (machineState : MachineState) =
     let currentLineNumber = machineState.CurrentInstructionLine;
