@@ -239,7 +239,7 @@ let runCopyToInstruction machineState registerIndex =
                 RegisterValue = Some machineState.HumanValue.Value
         }
     
-    let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
+    let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
     let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
     let result =
         {
@@ -287,7 +287,7 @@ let runIncrementInstruction machineState registerIndex =
             oldRegister with
                 RegisterValue = Some newValue
         }
-    let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
+    let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
     let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
     let result = 
         {
@@ -305,7 +305,7 @@ let runDecrementInstruction machineState registerIndex =
             oldRegister with
                 RegisterValue = Some newValue
         }
-    let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
+    let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
     let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
     let result = 
         {
@@ -316,6 +316,7 @@ let runDecrementInstruction machineState registerIndex =
         in result
 
 let runInstruction (machineState : MachineState) (instruction : Instruction) =
+    printfn "Running instruction %s" <| instruction.ToString()
     match instruction with
         | Inbox -> runInboxInstruction machineState
         | Outbox -> runOutBoxInstruction machineState
@@ -344,6 +345,7 @@ let run initialMachineState =
     while keepRunning do
         try
             currentState <- runStep currentState
+            printfn "%s\n" <| currentState.ToString()
             allStates <- List.append allStates [currentState]
         with
             Failure e -> 
@@ -407,6 +409,6 @@ let main argv =
     
     printfn "START"
     let states = run initialMachineState
-    printStates states
+    //printStates states
     printfn "END"
     let returnCode = 0 in returnCode
