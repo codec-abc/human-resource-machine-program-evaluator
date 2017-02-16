@@ -6,6 +6,20 @@ open System.Collections.Generic
 let LabelRegex = new Regex @"^(\w+):$"
 let InstructionRegex = new Regex @"^(\s+)(\w+)(\s*)(\w*)$"
 
+let listToString (listOfElem : 't list) =
+    let nbElem = listOfElem.Length
+    if nbElem = 0 then
+        "[]"
+    else
+        let elemsAsString = List.fold (fun accum elem -> accum + elem.ToString() + ", ") "" listOfElem
+        let fixedString = elemsAsString.Substring(0, elemsAsString.Length - 2)
+        "[" + fixedString + "]"
+
+let maybeToString (maybeAThing : 't option) =
+    match maybeAThing with
+        | None -> "None"
+        | Some aValue -> string <| aValue.ToString()
+
 type Register = 
     {
         Index : int;
@@ -67,17 +81,21 @@ type MachineState =
         CurrentInstructionLine : int;
     }
     override x.ToString() =
-        let inputsAsString =  List.fold (fun accum elem -> accum + " " + string elem) "" x.Inputs 
-        let outputsAsString = List.fold (fun accum elem -> accum + " " + string elem) "" x.Outputs
+        let inputsAsString = listToString x.Inputs
+        let outputsAsString = listToString x.Outputs
+        let registersAsStringList = List.map (fun r -> sprintf "{Index : %i, Value : %s}" r.Index (maybeToString r.RegisterValue)) x.Registers
+        let registersAsString = listToString registersAsStringList
         let humanValueAsString = 
             match x.HumanValue with
             | None -> "None"
             | Some aValue -> string aValue
         let result =
-             "State with Inputs " + inputsAsString + "\n" + 
-             "Outputs " + outputsAsString + "\n" + 
-             "Human Value " + humanValueAsString + "\n" + 
-             "Current Line " + x.CurrentInstructionLine.ToString()
+             "State" + "\n" + 
+             "Inputs: " + inputsAsString + "\n" + 
+             "Outputs: " + outputsAsString + "\n" + 
+             "Registers: " + registersAsString + "\n" + 
+             "Human Value: " + humanValueAsString + "\n" + 
+             "Current Line: " + x.CurrentInstructionLine.ToString()
         result
 
 let toInstruction (instructionName : string) (argument : string option) (lineNumber : int) =
@@ -328,9 +346,12 @@ let run initialMachineState =
             currentState <- runStep currentState
             allStates <- List.append allStates [currentState]
         with
-            _ -> 
+            Failure e -> 
                 keepRunning <- false
-                ()
+                printfn "Program evaluation has ended because %s" <| e.ToString()
+            | :? System.Exception as e ->
+                keepRunning <- false
+                printfn "Program evaluation has ended because %s" <| e.ToString()
     allStates
 
 let printStates states =
@@ -386,6 +407,6 @@ let main argv =
     
     printfn "START"
     let states = run initialMachineState
-    //printStates states
+    printStates states
     printfn "END"
     let returnCode = 0 in returnCode
