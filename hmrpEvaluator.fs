@@ -37,17 +37,13 @@ type Instruction =
         match x with
             | Inbox -> "Inbox"
             | Outbox -> "Outbox"
-
             | JumpIfNegative label -> "Jump if negative to : " + label.ToString()
             | JumpIfZero label -> "Jump if zero to : " + label.ToString()
             | Jump label -> "Jump to : " + label.ToString()
-
             | CopyTo register -> "Copy to : " + register.ToString()
             | CopyFrom register -> "Copy from : " + register.ToString()
-
             | Increment register -> "Increment : " + register.ToString()
             | Decrement register -> "Decrement : " + register.ToString()
-
             | Add register -> "Add with : " + register.ToString()
             | Subtract register -> "Subtract with : " + register.ToString()
 
@@ -70,26 +66,21 @@ type MachineState = {
     CurrentInstructionLine : int;
 }
 
-let toInstruction (instructionName : string) (argument : Option<string>) (lineNumber : int) =
+let toInstruction (instructionName : string) (argument : string option) (lineNumber : int) =
     let instructionUpperCase = instructionName.ToUpper()
     try
         match instructionUpperCase with
             | "INBOX" -> InstructionLine Inbox
             | "OUTBOX" -> InstructionLine Outbox
-
             | "JUMPZ" -> InstructionLine <| JumpIfZero argument.Value
             | "JUMPN" -> InstructionLine <| JumpIfNegative argument.Value
             | "JUMP" -> InstructionLine <| JumpIfNegative argument.Value
-
             | "COPYTO" -> let value = int argument.Value in InstructionLine <| CopyTo value
             | "COPYFROM" -> let value = int argument.Value in InstructionLine <| CopyFrom value
-
             | "BUMPUP" -> let value = int argument.Value in InstructionLine <| Increment value
             | "BUMPDN" -> let value = int argument.Value in InstructionLine <| Decrement value
-
             | "ADD" -> let value = int argument.Value in InstructionLine <| Add value
             | "SUB" -> let value = int argument.Value in InstructionLine <| Subtract value
-
             | _ -> MeaningLessLine
     with 
         | _ -> 
@@ -125,7 +116,12 @@ let parseLine (line : string) (lineNumber : int) =
         MeaningLessLine
 
 let skipLine machineState =
-    {machineState with CurrentInstructionLine = machineState.CurrentInstructionLine + 1}
+    let result = 
+        {
+            machineState with 
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1
+        }
+        in result
 
 let getLineIndexByLabelName (program : ProgramLine list) (labelToFind : string) =
     let filterFunc = fun (programLine : ProgramLine) -> 
@@ -144,23 +140,25 @@ let getRegisterByIndex (registers : Register list) (registerIndex : int) =
 let runInboxInstruction machineState =
     let firstElemOfInput = machineState.Inputs.[0]
     let restOfInput = List.tail machineState.Inputs
-
-    {
-        machineState with 
-            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-            HumanValue = Some firstElemOfInput;
-            Inputs = restOfInput;
-    }
+    let result = 
+        {
+            machineState with 
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                HumanValue = Some firstElemOfInput;
+                Inputs = restOfInput;
+        }
+        in result
 
 let runOutBoxInstruction machineState =
     let newOutputs = List.append machineState.Outputs [machineState.HumanValue.Value]
-
-    {
-        machineState with
-            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-            HumanValue = None;
-            Outputs = newOutputs
-    }
+    let result = 
+        {
+            machineState with
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                HumanValue = None;
+                Outputs = newOutputs
+        }
+        in result
 
 let runJumpIfNegativeInstruction machineState labelToJumpTo =
     let shouldJump = machineState.HumanValue.Value < 0;
@@ -170,10 +168,12 @@ let runJumpIfNegativeInstruction machineState labelToJumpTo =
         else
             machineState.CurrentInstructionLine + 1
 
-    {
-        machineState with
-            CurrentInstructionLine = nextLineIndex;
-    }
+    let result = 
+        {
+            machineState with
+                CurrentInstructionLine = nextLineIndex;
+        }
+        in result
 
 let runJumpIfZeroInstruction machineState labelToJumpTo =
     let shouldJump = machineState.HumanValue.Value = 0;
@@ -183,18 +183,21 @@ let runJumpIfZeroInstruction machineState labelToJumpTo =
         else
             machineState.CurrentInstructionLine + 1
 
-    {
-        machineState with
-            CurrentInstructionLine = nextLineIndex;
-    }
+    let result = 
+        {
+            machineState with
+                CurrentInstructionLine = nextLineIndex;
+        } 
+        in result
 
 let runJumpInstruction machineState labelToJumpTo =
     let nextLineIndex = getLineIndexByLabelName machineState.Program labelToJumpTo
-
-    {
-        machineState with
-            CurrentInstructionLine = nextLineIndex;
-    }
+    let result = 
+        {
+            machineState with
+                CurrentInstructionLine = nextLineIndex;
+        }
+        in result
 
 let runCopyToInstruction machineState registerIndex =
     let oldRegister = getRegisterByIndex machineState.Registers registerIndex
@@ -206,77 +209,79 @@ let runCopyToInstruction machineState registerIndex =
     
     let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
     let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
-
-    {
-        machineState with 
-            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-            Registers = allRegistersUpdate
-    }
+    let result =
+        {
+            machineState with 
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                Registers = allRegistersUpdate
+        }
+        in result
 
 let runCopyFromInstruction machineState registerIndex =
     let register = getRegisterByIndex machineState.Registers registerIndex
-
-    {
-        machineState with 
-            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-            HumanValue = Some register.RegisterValue.Value
-    }
+    let result = 
+        {
+            machineState with 
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                HumanValue = Some register.RegisterValue.Value
+        }
+        in result
 
 let runAddInstruction machineState registerIndex =
     let register = getRegisterByIndex machineState.Registers registerIndex
-
-    {
-        machineState with 
-            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-            HumanValue = Some <| register.RegisterValue.Value + machineState.HumanValue.Value
-    }
+    let result =
+        {
+            machineState with 
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                HumanValue = Some <| register.RegisterValue.Value + machineState.HumanValue.Value
+        }
+        in result
 
 let runSubtractInstruction machineState registerIndex =
     let register = getRegisterByIndex machineState.Registers registerIndex
-
-    {
-        machineState with 
-            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-            HumanValue = Some <| machineState.HumanValue.Value - register.RegisterValue.Value
-    }
+    let result =
+        {
+            machineState with 
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                HumanValue = Some <| machineState.HumanValue.Value - register.RegisterValue.Value
+        }
+        in result
 
 let runIncrementInstruction machineState registerIndex =
     let oldRegister = getRegisterByIndex machineState.Registers registerIndex
     let newValue = oldRegister.RegisterValue.Value + 1
-
     let newRegister = 
         {
             oldRegister with
                 RegisterValue = Some newValue
         }
-    
     let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
     let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
-
-    {
-        machineState with 
-            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-            Registers = allRegistersUpdate
-    }
+    let result = 
+        {
+            machineState with 
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                Registers = allRegistersUpdate
+        }
+        in result
 
 let runDecrementInstruction machineState registerIndex =
     let oldRegister = getRegisterByIndex machineState.Registers registerIndex
     let newValue = oldRegister.RegisterValue.Value - 1
-
     let newRegister = 
         {
             oldRegister with
                 RegisterValue = Some newValue
         }
-    
     let allRegisterExceptOne = List.filter (fun register -> register = oldRegister) machineState.Registers
     let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
-
-    {
-        machineState with 
-            CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-            Registers = allRegistersUpdate
-    }
+    let result = 
+        {
+            machineState with 
+                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                Registers = allRegistersUpdate
+        }
+        in result
 
 let runInstruction (machineState : MachineState) (instruction : Instruction) =
     match instruction with
@@ -300,23 +305,18 @@ let runStep (machineState : MachineState) =
         | LabelLine label -> skipLine machineState
         | InstructionLine instruction -> runInstruction machineState instruction
 
-
 let stringArrayToProgramList (lines : string array) =
     let results = new List<ProgramLine>()
     for i in 0 .. (lines.Length - 1) do
         let line = lines.[i]
         let result = parseLine line i
         results.Add(result)
-
-    let returnedValue = Seq.toList results
-    returnedValue
+    let returnedValue = Seq.toList results in returnedValue
 
 [<EntryPoint>]
 let main argv = 
     let lines = File.ReadAllLines "program.hrmp"
     let programLines = stringArrayToProgramList lines
-
     for result in programLines do
         printfn "%s" <| result.ToString()
-
     let returnCode = 0 in returnCode
