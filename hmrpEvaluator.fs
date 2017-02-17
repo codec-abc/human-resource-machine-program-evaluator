@@ -3,6 +3,7 @@ open System.IO
 open System.Text.RegularExpressions
 open System.Collections.Generic
 
+//TODO : replace use of IsSome, IsNone with pattern matching
 let LabelRegex = new Regex @"^(\w+):$"
 let InstructionRegex = new Regex @"^(\s+)(\w+)(\s*)(\w*)$"
 
@@ -98,6 +99,9 @@ type MachineState =
              "Current Line: " + x.CurrentInstructionLine.ToString()
         result
 
+type InstructionEvaluationResult =
+    | End of string
+    | NewState of  MachineState
 let toInstruction (instructionName : string) (argument : string option) (lineNumber : int) =
     let instructionUpperCase = instructionName.ToUpper()
     try
@@ -106,7 +110,7 @@ let toInstruction (instructionName : string) (argument : string option) (lineNum
             | "OUTBOX" -> InstructionLine Outbox
             | "JUMPZ" -> InstructionLine <| JumpIfZero argument.Value
             | "JUMPN" -> InstructionLine <| JumpIfNegative argument.Value
-            | "JUMP" -> InstructionLine <| JumpIfNegative argument.Value
+            | "JUMP" -> InstructionLine <| Jump argument.Value
             | "COPYTO" -> let value = int argument.Value in InstructionLine <| CopyTo value
             | "COPYFROM" -> let value = int argument.Value in InstructionLine <| CopyFrom value
             | "BUMPUP" -> let value = int argument.Value in InstructionLine <| Increment value
@@ -120,8 +124,8 @@ let toInstruction (instructionName : string) (argument : string option) (lineNum
                 match argument with
                 | None -> "None"
                 | Some x -> x.ToString()
-            printfn "Cannot parse line %i which instruction is %s and argument %s" lineNumber instructionName argumentToString
-            printfn "Line will be interpreted as a comment"
+            printfn "Cannot parse line %i which instruction is %s and argument %s." lineNumber instructionName argumentToString
+            printfn "Line will be interpreted as a comment."
             MeaningLessLine
 
 let parseLine (line : string) (lineNumber : int) =
@@ -129,8 +133,9 @@ let parseLine (line : string) (lineNumber : int) =
     let isInstruction = InstructionRegex.IsMatch line
     if isLabel then
         let regexMatch = LabelRegex.Match line
+
         let label =  {
-            Name = regexMatch.Groups.[0].Captures.[0].Value;
+            Name = regexMatch.Groups.[1].Captures.[0].Value;
             Line = lineNumber;
         }
         LabelLine label
@@ -160,206 +165,255 @@ let getLineIndexByLabelName (program : ProgramLine list) (labelToFind : string) 
         match programLine with
             | MeaningLessLine -> false
             | InstructionLine instruction -> false
-            | LabelLine label -> 
+            | LabelLine label ->
                 label.Name = labelToFind
-    List.findIndex filterFunc program
+    try
+        Ok <| List.findIndex filterFunc program
+    with
+        | _ -> Error <| sprintf "Cannot find line with the given label %s." labelToFind
 
 let getRegisterByIndex (registers : Register list) (registerIndex : int) =
     let filterFunc = fun (register : Register) -> 
         register.Index = registerIndex
-    List.find filterFunc registers
+    try
+        Ok <| List.find filterFunc registers
+    with
+        | _ -> Error <| sprintf "Cannot find register with the given index %i." registerIndex
 
 let runInboxInstruction machineState =
-    let firstElemOfInput = machineState.Inputs.[0]
-    let restOfInput = List.tail machineState.Inputs
-    let result = 
-        {
-            machineState with 
-                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                HumanValue = Some firstElemOfInput;
-                Inputs = restOfInput;
-        }
-        in result
+    if machineState.Inputs.Length > 0 then
+        let firstElemOfInput = machineState.Inputs.[0]
+        let restOfInput = List.tail machineState.Inputs
+        let result = 
+            {
+                machineState with 
+                    CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                    HumanValue = Some firstElemOfInput;
+                    Inputs = restOfInput;
+            }
+            in Ok result
+    else
+        Error "Cannot get an input because the input list is empty."
+
 
 let runOutBoxInstruction machineState =
-    let newOutputs = List.append machineState.Outputs [machineState.HumanValue.Value]
-    let result = 
-        {
-            machineState with
-                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                HumanValue = None;
-                Outputs = newOutputs
-        }
-        in result
+    if machineState.HumanValue.IsSome then
+        let newOutputs = List.append machineState.Outputs [machineState.HumanValue.Value]
+        let result = 
+            {
+                machineState with
+                    CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                    HumanValue = None;
+                    Outputs = newOutputs
+            }
+            in Ok result
+    else
+        Error "Cannot set output since there is no value in the human register."
 
 let runJumpIfNegativeInstruction machineState labelToJumpTo =
-    let shouldJump = machineState.HumanValue.Value < 0;
-    let nextLineIndex = 
-        if shouldJump then
-            getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
-        else
-            machineState.CurrentInstructionLine + 1
-
-    let result = 
-        {
-            machineState with
-                CurrentInstructionLine = nextLineIndex;
-        }
-        in result
+    if machineState.HumanValue.IsSome then
+        let shouldJump = machineState.HumanValue.Value < 0;
+        let nextLineIndexOrError = 
+            if shouldJump then
+                getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
+            else
+                Ok <| machineState.CurrentInstructionLine + 1
+        let f = 
+            fun nextLineIndex -> 
+                Ok {
+                    machineState with
+                        CurrentInstructionLine = nextLineIndex;
+                }
+        Result.bind f nextLineIndexOrError
+    else
+        Error "Cannot test to jump since there is no value in the human register."
 
 let runJumpIfZeroInstruction machineState labelToJumpTo =
-    let shouldJump = machineState.HumanValue.Value = 0;
-    let nextLineIndex = 
-        if shouldJump then
-            getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
-        else
-            machineState.CurrentInstructionLine + 1
-
-    let result = 
-        {
-            machineState with
-                CurrentInstructionLine = nextLineIndex;
-        } 
-        in result
+    if machineState.HumanValue.IsSome then
+        let shouldJump = machineState.HumanValue.Value = 0;
+        let nextLineIndexOrError = 
+            if shouldJump then
+                getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
+            else
+                Ok <| machineState.CurrentInstructionLine + 1
+        let f =
+            fun nextLineIndex -> 
+                Ok { 
+                    machineState with
+                        CurrentInstructionLine = nextLineIndex;
+                } 
+        Result.bind f nextLineIndexOrError
+    else
+        Error "Cannot test to jump since there is no value in the human register."
 
 let runJumpInstruction machineState labelToJumpTo =
-    let nextLineIndex = getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
-    let result = 
-        {
-            machineState with
-                CurrentInstructionLine = nextLineIndex;
-        }
-        in result
+    let nextLineIndexOrError = getLineIndexByLabelName machineState.ProgramLines labelToJumpTo
+    let f =
+        fun nextLineIndex ->
+            Ok {
+                machineState with
+                    CurrentInstructionLine = nextLineIndex;
+            }
+    Result.bind f nextLineIndexOrError
 
 let runCopyToInstruction machineState registerIndex =
-    let oldRegister = getRegisterByIndex machineState.Registers registerIndex
-    let newRegister = 
-        {
-            oldRegister with
-                RegisterValue = Some machineState.HumanValue.Value
-        }
-    
-    let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
-    let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
-    let result =
-        {
-            machineState with 
-                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                Registers = allRegistersUpdate
-        }
-        in result
+    let oldRegisterOrError = getRegisterByIndex machineState.Registers registerIndex
+    let f = 
+        fun oldRegister ->
+            let newRegister = 
+                {
+                    oldRegister with
+                        RegisterValue = Some machineState.HumanValue.Value
+                }
+            
+            let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
+            let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
+            Ok {
+                machineState with 
+                    CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                    Registers = allRegistersUpdate
+            }
+    Result.bind f oldRegisterOrError
 
 let runCopyFromInstruction machineState registerIndex =
-    let register = getRegisterByIndex machineState.Registers registerIndex
-    let result = 
-        {
-            machineState with 
-                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                HumanValue = Some register.RegisterValue.Value
-        }
-        in result
+    let registerOrError = getRegisterByIndex machineState.Registers registerIndex
+    let f =
+        fun register ->
+            if register.RegisterValue.IsSome then
+                Ok {
+                    machineState with 
+                        CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                        HumanValue = Some register.RegisterValue.Value
+                }
+            else
+                Error <| sprintf "Cannot copy from register %i because register has no value." register.Index
+    Result.bind f registerOrError
 
 let runAddInstruction machineState registerIndex =
-    let register = getRegisterByIndex machineState.Registers registerIndex
-    let result =
-        {
-            machineState with 
-                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                HumanValue = Some <| register.RegisterValue.Value + machineState.HumanValue.Value
-        }
-        in result
+    let registerOrError = getRegisterByIndex machineState.Registers registerIndex
+    let f = 
+        fun register ->
+            if register.RegisterValue.IsSome then
+                Ok {
+                    machineState with 
+                        CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                        HumanValue = Some <| register.RegisterValue.Value + machineState.HumanValue.Value
+                }
+            else
+                Error <| sprintf "Cannot add from register %i because register has no value." register.Index
+    Result.bind f registerOrError
 
 let runSubtractInstruction machineState registerIndex =
-    let register = getRegisterByIndex machineState.Registers registerIndex
-    let result =
-        {
-            machineState with 
-                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                HumanValue = Some <| machineState.HumanValue.Value - register.RegisterValue.Value
-        }
-        in result
+    let registerOrError = getRegisterByIndex machineState.Registers registerIndex
+    let f = 
+        fun register ->
+            if register.RegisterValue.IsSome then
+                Ok {
+                    machineState with 
+                        CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                        HumanValue = Some <| machineState.HumanValue.Value - register.RegisterValue.Value
+                }
+            else
+                Error <| sprintf "Cannot subtract from register %i because register has no value." register.Index
+    Result.bind f registerOrError
 
 let runIncrementInstruction machineState registerIndex =
-    let oldRegister = getRegisterByIndex machineState.Registers registerIndex
-    let newValue = oldRegister.RegisterValue.Value + 1
-    let newRegister = 
-        {
-            oldRegister with
-                RegisterValue = Some newValue
-        }
-    let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
-    let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
-    let result = 
-        {
-            machineState with 
-                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                Registers = allRegistersUpdate
-        }
-        in result
+    let oldRegisterOrError = getRegisterByIndex machineState.Registers registerIndex
+    let f = 
+        fun oldRegister ->
+            if oldRegister.RegisterValue.IsSome then
+                let newValue = oldRegister.RegisterValue.Value + 1
+                let newRegister = 
+                    {
+                        oldRegister with
+                            RegisterValue = Some newValue
+                    }
+                let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
+                let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
+                Ok {
+                    machineState with 
+                        CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                        Registers = allRegistersUpdate
+                }
+            else
+                Error <| sprintf "Cannot increment from register %i because register has no value." oldRegister.Index
+    Result.bind f oldRegisterOrError
 
 let runDecrementInstruction machineState registerIndex =
-    let oldRegister = getRegisterByIndex machineState.Registers registerIndex
-    let newValue = oldRegister.RegisterValue.Value - 1
-    let newRegister = 
-        {
-            oldRegister with
-                RegisterValue = Some newValue
-        }
-    let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
-    let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
-    let result = 
-        {
-            machineState with 
-                CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
-                Registers = allRegistersUpdate
-        }
-        in result
+    let oldRegisterOrError = getRegisterByIndex machineState.Registers registerIndex
+    let f = 
+        fun oldRegister ->
+            if oldRegister.RegisterValue.IsSome then
+                let newValue = oldRegister.RegisterValue.Value - 1
+                let newRegister = 
+                    {
+                        oldRegister with
+                            RegisterValue = Some newValue
+                    }
+                let allRegisterExceptOne = List.filter (fun register -> register <> oldRegister) machineState.Registers
+                let allRegistersUpdate = List.append allRegisterExceptOne [newRegister]
+                Ok  {
+                    machineState with 
+                        CurrentInstructionLine = machineState.CurrentInstructionLine + 1;
+                        Registers = allRegistersUpdate
+                }
+            else
+                Error <| sprintf "Cannot increment from register %i because register has no value." oldRegister.Index
+    Result.bind f oldRegisterOrError
 
 let runInstruction (machineState : MachineState) (instruction : Instruction) =
-    printfn "Running instruction %s" <| instruction.ToString()
-    match instruction with
-        | Inbox -> runInboxInstruction machineState
-        | Outbox -> runOutBoxInstruction machineState
-        | JumpIfNegative labelToJumpTo -> runJumpIfNegativeInstruction machineState labelToJumpTo
-        | JumpIfZero labelToJumpTo -> runJumpIfZeroInstruction machineState labelToJumpTo
-        | Jump labelToJumpTo -> runJumpInstruction machineState labelToJumpTo
-        | CopyTo registerIndex -> runCopyToInstruction machineState registerIndex
-        | CopyFrom registerIndex -> runCopyFromInstruction machineState registerIndex
-        | Add registerIndex -> runAddInstruction machineState registerIndex
-        | Subtract registerIndex -> runSubtractInstruction machineState registerIndex 
-        | Increment registerIndex -> runIncrementInstruction machineState registerIndex
-        | Decrement registerIndex -> runDecrementInstruction machineState registerIndex
+    //printfn "Running line %i with instruction %s " (machineState.CurrentInstructionLine + 1) (instruction.ToString())
+    let nextStep = 
+        match instruction with
+            | Inbox -> runInboxInstruction machineState
+            | Outbox -> runOutBoxInstruction machineState
+            | JumpIfNegative labelToJumpTo -> runJumpIfNegativeInstruction machineState labelToJumpTo
+            | JumpIfZero labelToJumpTo -> runJumpIfZeroInstruction machineState labelToJumpTo
+            | Jump labelToJumpTo -> runJumpInstruction machineState labelToJumpTo
+            | CopyTo registerIndex -> runCopyToInstruction machineState registerIndex
+            | CopyFrom registerIndex -> runCopyFromInstruction machineState registerIndex
+            | Add registerIndex -> runAddInstruction machineState registerIndex
+            | Subtract registerIndex -> runSubtractInstruction machineState registerIndex 
+            | Increment registerIndex -> runIncrementInstruction machineState registerIndex
+            | Decrement registerIndex -> runDecrementInstruction machineState registerIndex
+    match nextStep with
+        | Error str -> End str
+        | Ok newState -> NewState newState
 
 let runStep (machineState : MachineState) =
     let currentLineNumber = machineState.CurrentInstructionLine;
-    let currentInstruction = machineState.ProgramLines.[currentLineNumber];
-    match currentInstruction with
-        | MeaningLessLine -> skipLine machineState
-        | LabelLine label -> skipLine machineState
-        | InstructionLine instruction -> runInstruction machineState instruction
+    if currentLineNumber < machineState.ProgramLines.Length then
+        let currentInstruction = machineState.ProgramLines.[currentLineNumber];
+        match currentInstruction with
+            | MeaningLessLine -> NewState <| skipLine machineState
+            | LabelLine label -> NewState <| skipLine machineState
+            | InstructionLine instruction -> runInstruction machineState instruction
+    else
+        End "Program has ended. There is no more line to run."
 
 let run initialMachineState =
     let mutable keepRunning = true
     let mutable allStates = []
     let mutable currentState = initialMachineState
     while keepRunning do
-        try
-            currentState <- runStep currentState
-            printfn "%s\n" <| currentState.ToString()
-            allStates <- List.append allStates [currentState]
-        with
-            Failure e -> 
-                keepRunning <- false
-                printfn "Program evaluation has ended because %s" <| e.ToString()
-            | :? System.Exception as e ->
-                keepRunning <- false
-                printfn "Program evaluation has ended because %s" <| e.ToString()
+        let nextStepResult = runStep currentState
+        match nextStepResult with
+         | End errorMsg -> 
+            printfn "%s\n" errorMsg
+            keepRunning <- false
+         | NewState state ->
+            //printfn "%s\n" <| state.ToString()
+            allStates <- List.append allStates [state]
+            currentState <- state
     allStates
+
+let printState state =
+    let stateToString = state.ToString()
+    printfn "%s\n" stateToString
 
 let printStates states =
     for state in states do
-        let stateToString = state.ToString()
-        printfn "%s\n" stateToString
+        printState state
 
 let stringArrayToProgramList (lines : string array) =
     let results = new List<ProgramLine>()
@@ -391,14 +445,18 @@ let buildEmptyRegisters nbOfRegisters =
     registers
 
 let printProgramLines programLines =
+    let mutable i = 1
     for result in programLines do
-        printfn "%s" <| result.ToString()
+        printfn "Line %i %s" i (result.ToString())
+        i <- i + 1
 
 [<EntryPoint>]
 let main argv = 
     let lines = File.ReadAllLines "program.hrmp"
     let programLines = stringArrayToProgramList lines
+
     //printProgramLines programLines
+
     let initialMachineState = 
         {
             defaultMachineState with
@@ -407,8 +465,11 @@ let main argv =
                 Registers = buildEmptyRegisters 6
         }
     
-    printfn "START"
     let states = run initialMachineState
+    try 
+        let lastState = List.last states
+        printState lastState
+    with 
+        | _ -> ()
     //printStates states
-    printfn "END"
     let returnCode = 0 in returnCode
