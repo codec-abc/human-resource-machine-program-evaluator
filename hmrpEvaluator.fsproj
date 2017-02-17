@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="hmrpEvaluator.fs" />
+    <Compile Include="main.fs" />
     <EmbeddedResource Include="**\*.resx" />
   </ItemGroup>
 
