@@ -102,7 +102,7 @@ type MachineState =
 type InstructionEvaluationResult =
     | End of string
     | NewState of  MachineState
-    
+
 let toInstruction (instructionName : string) (argument : string option) (lineNumber : int) =
     let instructionUpperCase = instructionName.ToUpper()
     try
@@ -396,17 +396,19 @@ let run initialMachineState =
     let mutable keepRunning = true
     let mutable allStates = []
     let mutable currentState = initialMachineState
+    let mutable programStoppedReason = ""
     while keepRunning do
         let nextStepResult = runStep currentState
         match nextStepResult with
          | End errorMsg -> 
-            printfn "%s\n" errorMsg
+            //printfn "%s\n" errorMsg
+            programStoppedReason <- errorMsg
             keepRunning <- false
          | NewState state ->
             //printfn "%s\n" <| state.ToString()
             allStates <- List.append allStates [state]
             currentState <- state
-    allStates
+    (allStates, programStoppedReason)
 
 let printState state =
     let stateToString = state.ToString()
@@ -464,11 +466,14 @@ let main argv =
                 Registers = buildEmptyRegisters 6
         }
     
-    let states = run initialMachineState
+    let (states, stopReason) = run initialMachineState
     try 
         let lastState = List.last states
+        printfn "last state is:"
         printState lastState
     with 
         | _ -> ()
+
+    printfn "Program has stopped to run because:\n%s" stopReason
     //printStates states
     let returnCode = 0 in returnCode
