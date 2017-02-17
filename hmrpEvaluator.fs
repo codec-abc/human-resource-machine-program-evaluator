@@ -454,9 +454,7 @@ let printProgramLines programLines =
 let main argv = 
     let lines = File.ReadAllLines "program.hrmp"
     let programLines = stringArrayToProgramList lines
-
     //printProgramLines programLines
-
     let initialMachineState = 
         {
             defaultMachineState with
