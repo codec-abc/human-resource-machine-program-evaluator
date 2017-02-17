@@ -102,6 +102,7 @@ type MachineState =
 type InstructionEvaluationResult =
     | End of string
     | NewState of  MachineState
+    
 let toInstruction (instructionName : string) (argument : string option) (lineNumber : int) =
     let instructionUpperCase = instructionName.ToUpper()
     try
